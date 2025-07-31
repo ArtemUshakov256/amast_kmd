@@ -1,3 +1,7 @@
+import json
+
+from app.domain.entities import ProjectData
+from app.application.project_service import import_project_from_json, export_project_to_json
 
 from PySide6.QtWidgets import (
     QScrollArea, QSizePolicy, QAbstractScrollArea,
@@ -8,7 +12,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPixmap
 from app.presentation.constants import *
-import json
 
 
 class MainWindow(QWidget):
@@ -19,6 +22,11 @@ class MainWindow(QWidget):
         self.adjustSize()
         layout = QVBoxLayout(self)
 
+        self.open_button = QPushButton("Открыть проект")
+        self.open_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.open_button.clicked.connect(self.open_project)
+        layout.addWidget(self.open_button)
+        
         layout.addWidget(QLabel("Секции"))
         self.sections_table = self.create_sections_table()
         scroll1_table = self.wrap_table_in_scroll(self.sections_table)
@@ -338,7 +346,7 @@ class MainWindow(QWidget):
     
     def export_data(self) -> None:
         """
-        Импортирует данные из таблиц и сохраняет в JSON-файл.
+        Экспортирует данные из таблиц и сохраняет в JSON-файл.
         Исключает строку 'Траверсы' как заголовок, 'additional' собирает в список пар.
         """
         # Сбор данных по секциям
@@ -419,6 +427,72 @@ class MainWindow(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить файл:\n{str(e)}")
 
+    def open_project(self):
+        """
+        Загружает проект из JSON и заполняет интерфейс.
+        """
+        filepath, _ = QFileDialog.getOpenFileName(self, "Открыть проект", "", "JSON Files (*.json)")
+        if not filepath:
+            return
+
+        project = import_project_from_json(filepath)
+
+        # Sections
+        for row in range(self.sections_table.rowCount()):
+            item = self.sections_table.item(row, 0)
+            if not item:
+                continue
+            name = item.text().strip()
+            section_data = project.sections.get(name)
+            if not section_data:
+                continue
+            for col in range(1, self.sections_table.columnCount()):
+                header_item = self.sections_table.horizontalHeaderItem(col)
+                if not header_item:
+                    continue
+                header = header_item.text().strip()
+                value = section_data.parameters.get(header, "")
+                widget = self.sections_table.cellWidget(row, col)
+                if isinstance(widget, QComboBox):
+                    index = widget.findText(value)
+                    widget.setCurrentIndex(index if index >= 0 else 0)
+                else:
+                    self.sections_table.setItem(row, col, QTableWidgetItem(value))
+
+        # Traverses
+        for row in range(self.traverse_table.rowCount()):
+            item = self.traverse_table.item(row, 0)
+            if not item:
+                continue
+            name = item.text().strip()
+            traverse_data = project.traverses.get(name)
+            if not traverse_data:
+                continue
+            for col in range(1, self.traverse_table.columnCount()):
+                header_item = self.traverse_table.horizontalHeaderItem(col)
+                if not header_item:
+                    continue
+                header = header_item.text().strip()
+                value = traverse_data.parameters.get(header, "")
+                widget = self.traverse_table.cellWidget(row, col)
+                if isinstance(widget, QComboBox):
+                    index = widget.findText(value)
+                    widget.setCurrentIndex(index if index >= 0 else 0)
+                else:
+                    self.traverse_table.setItem(row, col, QTableWidgetItem(value))
+
+        # Additional
+        for i, value in enumerate(project.additional):
+            if i >= self.additional_table.rowCount():
+                break
+            widget = self.additional_table.cellWidget(i, 1)
+            if isinstance(widget, QComboBox):
+                index = widget.findText(value)
+                widget.setCurrentIndex(index if index >= 0 else 0)
+            else:
+                self.additional_table.setItem(i, 1, QTableWidgetItem(value))
+
+        QMessageBox.information(self, "Импорт", "Проект успешно загружен.")
 
 def run_app():
     app = QApplication([])
