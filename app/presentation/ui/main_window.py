@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QSizePolicy, QAbstractScrollArea,
     QApplication, QWidget, QVBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QPushButton, QComboBox, QHeaderView,
-    QHBoxLayout
+    QHBoxLayout, QMessageBox, QFileDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPixmap
@@ -23,22 +23,12 @@ class MainWindow(QWidget):
         self.sections_table = self.create_sections_table()
         scroll1_table = self.wrap_table_in_scroll(self.sections_table)
         self.set_initial_state_in_sections_table()
-        # scroll1 = QScrollArea()
-        # scroll1.setWidgetResizable(True)
-        # self.sections_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
-        # self.sections_table.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        # scroll1.setWidget(self.sections_table)
         layout.addWidget(scroll1_table)
 
         layout.addWidget(QLabel("Траверсы"))
         self.traverse_table = self.create_traverse_table()
         scroll2_table = self.wrap_table_in_scroll(self.traverse_table)
         self.set_initial_state_in_traverse_table()
-        # scroll2 = QScrollArea()
-        # scroll2.setWidgetResizable(True)
-        # self.traverse_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
-        # self.traverse_table.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        # scroll2.setWidget(self.traverse_table)
         layout.addWidget(scroll2_table)
 
         layout.addWidget(QLabel("Угол узла на уровне троса"))
@@ -58,10 +48,11 @@ class MainWindow(QWidget):
         layout.addWidget(container)
 
         self.import_button = QPushButton("Экспортировать данные")
-        self.import_button.clicked.connect(self.import_data)
+        self.import_button.clicked.connect(self.export_data)
         layout.addWidget(self.import_button)
 
-    def create_sections_table(self):
+    def create_sections_table(self) -> QTableWidget:
+        """Создает таблицу секций с параметрами и выпадающими списками."""
         table = QTableWidget(len(SECTIONS_ROWS) + 1, len(SECTIONS_HEADERS))
         table.verticalHeader().setVisible(False)
         
@@ -119,7 +110,8 @@ class MainWindow(QWidget):
 
         return table
 
-    def create_traverse_table(self):
+    def create_traverse_table(self) -> QTableWidget:
+        """Создает таблицу траверс с предопределенными значениями."""
         row_count = 2 + len(TRAVERSE_ROWS)  # 2 заголовка + данные
         col_count = 34  # колонки разбиты вручную
 
@@ -199,7 +191,8 @@ class MainWindow(QWidget):
                 
         return table
 
-    def create_additional_table(self, ):
+    def create_additional_table(self) -> QTableWidget:
+        """Создает таблицу дополнительных параметров."""
         table = QTableWidget(4, 2)
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setVisible(False)
@@ -247,7 +240,10 @@ class MainWindow(QWidget):
                     item.setBackground(QBrush(QColor("white"))) 
             table.viewport().update()
 
-    def set_initial_state_in_sections_table(self):
+    def set_initial_state_in_sections_table(self) -> None:
+        """
+        Деактивирует и закрашивает недоступные ячейки в таблице секций.
+        """
         table = self.sections_table
         for row_idx in range(len(SECTIONS_ROWS)):
             if row_idx == 6:
@@ -256,7 +252,10 @@ class MainWindow(QWidget):
             else:
                 self.disable_and_grey_cell(table, row_idx, 8)
 
-    def set_initial_state_in_traverse_table(self):
+    def set_initial_state_in_traverse_table(self) -> None:
+        """
+        Устанавливает начальное состояние ячеек таблицы траверс.
+        """
         table = self.traverse_table
         for row_idx in range(len(TRAVERSE_ROWS) + 2):
             if row_idx > 4:
@@ -308,7 +307,11 @@ class MainWindow(QWidget):
             item.setToolTip(tooltips[key])
         table.setItem(row, col, item)
 
-    def wrap_table_in_scroll(self, table: QTableWidget, max_width=1200, max_height=380) -> QScrollArea:
+    def wrap_table_in_scroll(self, table: QTableWidget) -> QScrollArea:
+        """
+        Оборачивает таблицу в scroll area, адаптированную под содержимое.
+        Показывает скроллы, если таблица не помещается в окно.
+        """
         """
         Оборачивает таблицу в scroll и подгоняет scroll под размер таблицы.
         """
@@ -333,36 +336,88 @@ class MainWindow(QWidget):
         scroll.setMinimumSize(100, 100)  # чтобы при пустой таблице не было краха
         return scroll
     
-    def import_data(self):
+    def export_data(self) -> None:
+        """
+        Импортирует данные из таблиц и сохраняет в JSON-файл.
+        Исключает строку 'Траверсы' как заголовок, 'additional' собирает в список пар.
+        """
+        # Сбор данных по секциям
         section_data = {}
         for row in range(self.sections_table.rowCount()):
-            key = self.sections_table.item(row, 0).text()
+            item = self.sections_table.item(row, 0)
+            if not item or not item.text().strip():
+                continue
+            key = item.text().strip()
             section_data[key] = {}
             for col in range(1, self.sections_table.columnCount()):
                 header = SECTIONS_HEADERS[col]
-                if self.sections_table.cellWidget(row, col):
-                    val = self.sections_table.cellWidget(row, col).currentText()
+                if (widget := self.sections_table.cellWidget(row, col)):
+                    val = widget.currentText()
+                elif (cell := self.sections_table.item(row, col)):
+                    val = cell.text()
                 else:
-                    val = self.sections_table.item(row, col).text()
+                    val = ""
                 section_data[key][header] = val
 
+        # Сбор данных по траверсам
         traverse_data = {}
         for row in range(self.traverse_table.rowCount()):
-            key = self.traverse_table.item(row, 0).text()
+            item = self.traverse_table.item(row, 0)
+            if not item or not item.text().strip():
+                continue
+            key = item.text().strip()
+            if "траверс" in key.lower():
+                continue
             traverse_data[key] = {}
             for col in range(1, self.traverse_table.columnCount()):
-                header = self.traverse_headers[col]
-                traverse_data[key][header] = self.traverse_table.item(row, col).text()
+                header_item = self.traverse_table.horizontalHeaderItem(col)
+                header = header_item.text() if header_item else f"Column {col}"
+                widget = self.traverse_table.cellWidget(row, col)
+                if isinstance(widget, QComboBox):
+                    val = widget.currentText()
+                elif (cell := self.traverse_table.item(row, col)):
+                    val = cell.text()
+                else:
+                    val = ""
+                traverse_data[key][header] = val
 
+        # Сбор additional как список значений
+        additional_data = []
+        for row in range(self.additional_table.rowCount()):
+            widget = self.additional_table.cellWidget(row, 1)
+            if isinstance(widget, QComboBox):
+                val = widget.currentText()
+            else:
+                cell = self.additional_table.item(row, 1)
+                val = cell.text() if cell else ""
+
+            if val.strip():
+                additional_data.append(val.strip())
+
+        # Финальный объект
         self.data = {
             "sections": section_data,
-            "traverses": traverse_data
+            "traverses": traverse_data,
+            "additional": additional_data,
         }
 
-        with open("data.json", "w", encoding="utf-8") as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=4)
+        # Диалог выбора файла
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить данные как...",
+            "data.json",
+            "JSON Files (*.json)"
+        )
 
-        print("✅ Данные успешно экспортированы")
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, ensure_ascii=False, indent=4)
+            QMessageBox.information(self, "Успешно", f"Данные сохранены в:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить файл:\n{str(e)}")
 
 
 def run_app():
