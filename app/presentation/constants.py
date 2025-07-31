@@ -72,3 +72,6 @@ SUBHEADERS = ["№1", "№2", "№3", "№4", "№5"]
 
 
 DEGREE_COMBOBOX = [f"{i}" for i in range(361) if i % 30 == 0]
+
+
+DEGREE_IMAGE_PATH = "app\\presentation\\assets\\images\\degree_image.png"

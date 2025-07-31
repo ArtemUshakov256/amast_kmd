@@ -2,11 +2,12 @@
 from PySide6.QtWidgets import (
     QScrollArea, QSizePolicy, QAbstractScrollArea,
     QApplication, QWidget, QVBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QPushButton, QComboBox, QHeaderView
+    QTableWidgetItem, QPushButton, QComboBox, QHeaderView,
+    QHBoxLayout
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor
-from ..constants import *
+from PySide6.QtGui import QBrush, QColor, QPixmap
+from app.presentation.constants import *
 import json
 
 
@@ -20,32 +21,41 @@ class MainWindow(QWidget):
 
         layout.addWidget(QLabel("Секции"))
         self.sections_table = self.create_sections_table()
+        scroll1_table = self.wrap_table_in_scroll(self.sections_table)
         self.set_initial_state_in_sections_table()
-        scroll1 = QScrollArea()
-        scroll1.setWidgetResizable(True)
-        self.sections_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
-        self.sections_table.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        scroll1.setWidget(self.sections_table)
-        layout.addWidget(scroll1)
+        # scroll1 = QScrollArea()
+        # scroll1.setWidgetResizable(True)
+        # self.sections_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        # self.sections_table.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        # scroll1.setWidget(self.sections_table)
+        layout.addWidget(scroll1_table)
 
         layout.addWidget(QLabel("Траверсы"))
         self.traverse_table = self.create_traverse_table()
+        scroll2_table = self.wrap_table_in_scroll(self.traverse_table)
         self.set_initial_state_in_traverse_table()
-        scroll2 = QScrollArea()
-        scroll2.setWidgetResizable(True)
-        self.traverse_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
-        self.traverse_table.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        scroll2.setWidget(self.traverse_table)
-        layout.addWidget(scroll2)
+        # scroll2 = QScrollArea()
+        # scroll2.setWidgetResizable(True)
+        # self.traverse_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        # self.traverse_table.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        # scroll2.setWidget(self.traverse_table)
+        layout.addWidget(scroll2_table)
 
         layout.addWidget(QLabel("Угол узла на уровне троса"))
         self.additional_table = self.create_additional_table()
-        scroll3 = QScrollArea()
-        scroll3.setWidgetResizable(True)
-        self.additional_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
-        self.additional_table.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        scroll3.setWidget(self.additional_table)
-        layout.addWidget(scroll3)
+        scroll3_table = self.wrap_table_in_scroll(self.additional_table)
+        image_label = QLabel()
+        pixmap = QPixmap(DEGREE_IMAGE_PATH)
+        pixmap = pixmap.scaledToWidth(300, Qt.SmoothTransformation)
+        image_label.setPixmap(pixmap)
+        image_label.setAlignment(Qt.AlignTop)
+        hbox = QHBoxLayout()
+        hbox.addWidget(scroll3_table)
+        hbox.addWidget(image_label)
+        hbox.setAlignment(Qt.AlignTop)
+        container = QWidget()
+        container.setLayout(hbox)
+        layout.addWidget(container)
 
         self.import_button = QPushButton("Экспортировать данные")
         self.import_button.clicked.connect(self.import_data)
@@ -298,6 +308,31 @@ class MainWindow(QWidget):
             item.setToolTip(tooltips[key])
         table.setItem(row, col, item)
 
+    def wrap_table_in_scroll(self, table: QTableWidget, max_width=1200, max_height=380) -> QScrollArea:
+        """
+        Оборачивает таблицу в scroll и подгоняет scroll под размер таблицы.
+        """
+        width = table.verticalHeader().width()
+        for col in range(table.columnCount()):
+            width += table.columnWidth(col)
+        width += table.frameWidth() * 2
+
+        height = table.horizontalHeader().height()
+        for row in range(table.rowCount()):
+            height += table.rowHeight(row)
+        height += table.frameWidth() * 2
+
+        # Настройка scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(table)
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Максимально возможный размер scroll'а = размер таблицы
+        scroll.setMaximumSize(width + 20, height + 20)  # запас на scrollbars
+        scroll.setMinimumSize(100, 100)  # чтобы при пустой таблице не было краха
+        return scroll
+    
     def import_data(self):
         section_data = {}
         for row in range(self.sections_table.rowCount()):
