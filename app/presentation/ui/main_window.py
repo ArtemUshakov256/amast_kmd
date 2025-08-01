@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QPushButton, QComboBox, QHeaderView,
     QHBoxLayout, QMessageBox, QFileDialog
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QPixmap
 from app.presentation.constants import *
 
@@ -229,7 +229,7 @@ class MainWindow(QWidget):
         elif conn_type == "Телескоп.":
             disabled_cols = ["Dсекции, мм (ℹ)", "Толщина фланца, мм",
                              "Кол-во болтов, шт", "d болтов, мм",
-                             "D располож.\nболтов, мм"]
+                             "D располож.\nболтов, мм (ℹ)"]
 
         for col_idx in range(2, table.columnCount()):
             col_name = SECTIONS_HEADERS[col_idx]
@@ -427,7 +427,7 @@ class MainWindow(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить файл:\n{str(e)}")
 
-    def open_project(self):
+    def open_project(self) -> None:
         """
         Загружает проект из JSON и заполняет интерфейс.
         """
@@ -454,32 +454,56 @@ class MainWindow(QWidget):
                 value = section_data.parameters.get(header, "")
                 widget = self.sections_table.cellWidget(row, col)
                 if isinstance(widget, QComboBox):
-                    index = widget.findText(value)
-                    widget.setCurrentIndex(index if index >= 0 else 0)
+                    idx = widget.findText(value)
+                    if idx >= 0:
+                        widget.setCurrentIndex(idx)
+                        if col == 1:
+                            QTimer.singleShot(0, lambda row=row: self.handle_connection_type_change(row))
                 else:
                     self.sections_table.setItem(row, col, QTableWidgetItem(value))
 
         # Traverses
-        for row in range(self.traverse_table.rowCount()):
-            item = self.traverse_table.item(row, 0)
-            if not item:
+        for row_key, traverse_data in project.traverses.items():
+            try:
+                row = int(row_key) + 1  # +1 т.к. 0 — заголовок, 1 — подзаголовок
+            except ValueError:
                 continue
-            name = item.text().strip()
-            traverse_data = project.traverses.get(name)
-            if not traverse_data:
-                continue
-            for col in range(1, self.traverse_table.columnCount()):
+
+            # 1. Поддержка по заголовкам
+            for col in range(self.traverse_table.columnCount()):
                 header_item = self.traverse_table.horizontalHeaderItem(col)
-                if not header_item:
-                    continue
-                header = header_item.text().strip()
-                value = traverse_data.parameters.get(header, "")
-                widget = self.traverse_table.cellWidget(row, col)
-                if isinstance(widget, QComboBox):
-                    index = widget.findText(value)
-                    widget.setCurrentIndex(index if index >= 0 else 0)
-                else:
-                    self.traverse_table.setItem(row, col, QTableWidgetItem(value))
+                if header_item:
+                    header = header_item.text().strip()
+                    value = traverse_data.parameters.get(header, None)
+                    if value is not None:
+                        widget = self.traverse_table.cellWidget(row, col)
+                        if isinstance(widget, QComboBox):
+                            index = widget.findText(value)
+                            widget.setCurrentIndex(index if index >= 0 else 0)
+                        else:
+                            item = QTableWidgetItem(value)
+                            item.setTextAlignment(Qt.AlignCenter)
+                            self.traverse_table.setItem(row, col, item)
+
+            # 2. Дополнительно проходим по ключам вида "Column N"
+            for key, value in traverse_data.parameters.items():
+                if key.startswith("Column "):
+                    try:
+                        col_num = int(key.split(" ")[1])
+                        col = col_num
+                        if col < 0 or col >= self.traverse_table.columnCount():
+                            continue
+                    except ValueError:
+                        continue
+
+                    widget = self.traverse_table.cellWidget(row, col)
+                    if isinstance(widget, QComboBox):
+                        index = widget.findText(value)
+                        widget.setCurrentIndex(index if index >= 0 else 0)
+                    else:
+                        item = QTableWidgetItem(value)
+                        item.setTextAlignment(Qt.AlignCenter)
+                        self.traverse_table.setItem(row, col, item)
 
         # Additional
         for i, value in enumerate(project.additional):
